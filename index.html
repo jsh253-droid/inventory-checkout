@@ -133,6 +133,10 @@ const store = {
 let data = null;
 try { data = JSON.parse(store.get('data') || 'null'); } catch {}
 let office = store.get('office');
+// A link-only office (no tab button) shows when the link names it: ?office=Warehouse.
+const linkOffice = (new URLSearchParams(location.search).get('office') || '').trim().toLowerCase();
+let linkApplied = false;
+const shownOffices = () => data.config.offices.filter(o => !(data.config.hidden || []).includes(o) || o.toLowerCase() === linkOffice);
 // Cart lines: {office, item, qty}. Kept across reloads and tabs.
 let cart = [];
 try { cart = JSON.parse(store.get('cart') || '[]'); } catch {}
@@ -161,7 +165,9 @@ async function api(method, payload) {
 function apply(d) {
   data = d;
   store.set('data', JSON.stringify(d));
-  if (!d.config.offices.includes(office)) office = d.config.offices[0];
+  const linked = d.config.offices.find(o => o.toLowerCase() === linkOffice);
+  if (linked && !linkApplied) { office = linked; linkApplied = true; }
+  if (!shownOffices().includes(office)) office = shownOffices()[0];
   document.title = d.config.title;
   $('co-event').required = d.config.requireEvent;
   $('co-event').placeholder = d.config.requireEvent ? 'Event (required)' : 'Event';
@@ -173,9 +179,9 @@ function apply(d) {
 const findItem = (off, name) => (data?.items[off] || []).find(it => it.name === name);
 
 function renderTabs() {
-  $('tabs').innerHTML = data.config.offices.map(o => `<button class="${o === office ? 'active' : ''}">${esc(o)}</button>`).join('');
+  $('tabs').innerHTML = shownOffices().map(o => `<button class="${o === office ? 'active' : ''}">${esc(o)}</button>`).join('');
   [...$('tabs').children].forEach((b, i) => b.onclick = () => {
-    office = data.config.offices[i];
+    office = shownOffices()[i];
     store.set('office', office);
     $('filter').value = '';
     renderTabs();

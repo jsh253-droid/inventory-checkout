@@ -30,9 +30,10 @@ const DEFAULT_CONFIG = {
   title: 'Inventory Check Out',
   requireEvent: false,
   offices: [
-    { name: 'Warehouse', sheet: 'Warehouse', firstRow: 2 },
     { name: 'OFSA Office', sheet: 'OFSA', firstRow: 2 },
     { name: 'DM Office', sheet: 'DM Office', firstRow: 2 },
+    // Link only: no tab button on the site; open it with ?office=Warehouse.
+    { name: 'Warehouse', sheet: 'Warehouse', firstRow: 2, hidden: true },
   ],
 };
 
@@ -120,6 +121,7 @@ function saveConfig_(c) {
     name: String(o.name || '').trim(),
     sheet: String(o.sheet || ''),
     firstRow: Math.max(1, Math.floor(Number(o.firstRow)) || 2),
+    hidden: !!o.hidden,
   }));
   if (!offices.length) throw new Error('Add at least one office.');
   offices.forEach(o => {
@@ -173,11 +175,13 @@ function readOffice_(office) {
 }
 
 // Finds the office's item columns from its Total Out formula, e.g.
-// ('Form Responses 1'!$Z$2:$AR=B2) -> column Z.
+// ('Form Responses 1'!$Z$2:$AR=B2) -> column Z. Uses the first row that has
+// one, since a tab can have blank rows above its first item.
 function formBlock_(sh, firstRow) {
-  const formula = sh.getRange(firstRow, COL.out).getFormula();
-  const m = formula.match(/'Form Responses 1'!\$([A-Z]+)\$\d+:\$[A-Z]+\s*=\s*B\d/);
-  if (!m) throw new Error(`Can't find the form columns in ${sh.getName()}!H${firstRow}'s Total Out formula.`);
+  const last = Math.max(sh.getLastRow(), firstRow);
+  const formulas = sh.getRange(firstRow, COL.out, last - firstRow + 1, 1).getFormulas();
+  const m = formulas.map(r => r[0].match(/'Form Responses 1'!\$([A-Z]+)\$\d+:\$[A-Z]+\s*=\s*B\d/)).find(Boolean);
+  if (!m) throw new Error(`Can't find the form columns in ${sh.getName()}'s Total Out formulas (column H, from row ${firstRow}).`);
   return m[1].split('').reduce((n, ch) => n * 26 + ch.charCodeAt(0) - 64, 0);
 }
 
@@ -416,7 +420,10 @@ function getData_(fresh) {
     if (e.team) teams.add(e.team);
   });
   const data = {
-    config: { title: cfg.title, requireEvent: !!cfg.requireEvent, offices: offices.map(o => o.name) },
+    config: {
+      title: cfg.title, requireEvent: !!cfg.requireEvent, offices: offices.map(o => o.name),
+      hidden: cfg.offices.filter(o => o.hidden).map(o => o.name),
+    },
     items: Object.fromEntries(offices.map(o => [o.name, o.items])),
     out: out.sort((a, b) => (a.since < b.since ? 1 : -1)),
     recent: log.slice(-30).reverse().map(e => ({ ts: e.ts, who: e.who, name: e.name, netid: e.netid, action: e.action, event: e.event, items: e.items })),
