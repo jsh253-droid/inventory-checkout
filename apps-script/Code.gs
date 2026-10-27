@@ -32,6 +32,8 @@ const DEFAULT_CONFIG = {
   offices: [
     { name: 'OFSA Office', sheet: 'OFSA', firstRow: 2 },
     { name: 'DM Office', sheet: 'DM Office', firstRow: 2 },
+    // Link only: no tab button on the site; open it with ?office=Warehouse.
+    { name: 'Warehouse', sheet: 'Warehouse', firstRow: 2, hidden: true },
   ],
 };
 
@@ -119,6 +121,7 @@ function saveConfig_(c) {
     name: String(o.name || '').trim(),
     sheet: String(o.sheet || ''),
     firstRow: Math.max(1, Math.floor(Number(o.firstRow)) || 2),
+    hidden: !!o.hidden,
   }));
   if (!offices.length) throw new Error('Add at least one office.');
   offices.forEach(o => {
@@ -417,7 +420,10 @@ function getData_(fresh) {
     if (e.team) teams.add(e.team);
   });
   const data = {
-    config: { title: cfg.title, requireEvent: !!cfg.requireEvent, offices: offices.map(o => o.name) },
+    config: {
+      title: cfg.title, requireEvent: !!cfg.requireEvent, offices: offices.map(o => o.name),
+      hidden: cfg.offices.filter(o => o.hidden).map(o => o.name),
+    },
     items: Object.fromEntries(offices.map(o => [o.name, o.items])),
     out: out.sort((a, b) => (a.since < b.since ? 1 : -1)),
     recent: log.slice(-30).reverse().map(e => ({ ts: e.ts, who: e.who, name: e.name, netid: e.netid, action: e.action, event: e.event, items: e.items })),

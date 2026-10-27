@@ -111,10 +111,10 @@
       <label class="check"><input type="checkbox" id="set-event"> Require an event on every check-out</label>
 
       <h2>Offices</h2>
-      <p class="muted">Each office is a tab on the check-out site. It reads items from the sheet tab you pick, starting at "first row" (2 = just below the header). The tab's Total Out formula tells the site which Form Responses columns belong to it.</p>
+      <p class="muted">Each office is a tab on the check-out site. It reads items from the sheet tab you pick, starting at "first row" (2 = just below the header). The tab's Total Out formula tells the site which Form Responses columns belong to it. A "link only" office has no tab button; open it by adding ?office= and its name to the site link, e.g. ?office=Warehouse.</p>
       <div class="wrap">
         <table>
-          <thead><tr><th>Office name</th><th>Sheet tab</th><th>First row</th><th></th></tr></thead>
+          <thead><tr><th>Office name</th><th>Sheet tab</th><th>First row</th><th>Link only</th><th></th></tr></thead>
           <tbody id="offices"></tbody>
         </table>
       </div>
@@ -333,12 +333,13 @@ function renderSettings() {
     `<td><input data-k="name" value="${esc(o.name)}"></td>` +
     `<td><select data-k="sheet">${state.sheets.map(s => `<option${s === o.sheet ? ' selected' : ''}>${esc(s)}</option>`).join('')}</select></td>` +
     `<td><input data-k="firstRow" type="number" min="1" value="${esc(o.firstRow)}" style="max-width:90px"></td>` +
+    `<td><input data-k="hidden" type="checkbox"${o.hidden ? ' checked' : ''}></td>` +
     `<td class="actions"><button class="small" data-act="up"${i ? '' : ' disabled'}>↑</button><button class="small" data-act="down"${i < d.offices.length - 1 ? '' : ' disabled'}>↓</button><button class="small danger" data-act="remove">Remove</button></td></tr>`).join('');
 }
 
 $('offices').oninput = e => {
   const i = Number(e.target.closest('tr').dataset.i);
-  state.draft.offices[i][e.target.dataset.k] = e.target.value;
+  state.draft.offices[i][e.target.dataset.k] = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
 };
 $('offices').onclick = e => {
   const btn = e.target.closest('button[data-act]');
