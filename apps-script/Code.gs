@@ -30,7 +30,6 @@ const DEFAULT_CONFIG = {
   title: 'Inventory Check Out',
   requireEvent: false,
   offices: [
-    { name: 'Warehouse', sheet: 'Warehouse', firstRow: 2 },
     { name: 'OFSA Office', sheet: 'OFSA', firstRow: 2 },
     { name: 'DM Office', sheet: 'DM Office', firstRow: 2 },
   ],
@@ -173,11 +172,13 @@ function readOffice_(office) {
 }
 
 // Finds the office's item columns from its Total Out formula, e.g.
-// ('Form Responses 1'!$Z$2:$AR=B2) -> column Z.
+// ('Form Responses 1'!$Z$2:$AR=B2) -> column Z. Uses the first row that has
+// one, since a tab can have blank rows above its first item.
 function formBlock_(sh, firstRow) {
-  const formula = sh.getRange(firstRow, COL.out).getFormula();
-  const m = formula.match(/'Form Responses 1'!\$([A-Z]+)\$\d+:\$[A-Z]+\s*=\s*B\d/);
-  if (!m) throw new Error(`Can't find the form columns in ${sh.getName()}!H${firstRow}'s Total Out formula.`);
+  const last = Math.max(sh.getLastRow(), firstRow);
+  const formulas = sh.getRange(firstRow, COL.out, last - firstRow + 1, 1).getFormulas();
+  const m = formulas.map(r => r[0].match(/'Form Responses 1'!\$([A-Z]+)\$\d+:\$[A-Z]+\s*=\s*B\d/)).find(Boolean);
+  if (!m) throw new Error(`Can't find the form columns in ${sh.getName()}'s Total Out formulas (column H, from row ${firstRow}).`);
   return m[1].split('').reduce((n, ch) => n * 26 + ch.charCodeAt(0) - 64, 0);
 }
 

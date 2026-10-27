@@ -3,7 +3,7 @@
 A check-out/check-in page for the **Feehan-DM Inventory** Google Sheet. The page is hosted on GitHub Pages, and a Google Apps Script handles the sheet.
 
 - Check-outs and check-ins are written to **Form Responses 1** in the Google Form's own format (`Take out` / `Check in`), so each tab's **Total Out** and **Current Qty** formulas count them along with real form submissions.
-- Items and their Current Qty are read live from the Warehouse, OFSA and DM Office tabs. The item columns each tab uses in Form Responses 1 are read from its Total Out formula.
+- Items and their Current Qty are read live from the OFSA and DM Office tabs. The item columns each tab uses in Form Responses 1 are read from its Total Out formula.
 - "Checked out now" lists reusable items people still have (take-outs minus check-ins). Consumables are counted but never listed as checked out.
 - For speed, one request loads every tab, the server keeps that result for 20 seconds (any write clears it), and the page shows its last copy instantly while it refreshes.
 
