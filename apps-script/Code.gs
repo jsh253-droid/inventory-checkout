@@ -38,6 +38,9 @@ const DEFAULT_CONFIG = {
 
 function doGet(e) {
   if (e.parameter.page === 'admin') {
+    if (!runsAsViewer_()) {
+      return HtmlService.createHtmlOutput('The admin portal is on its own deployment. Use the Admin link on the check-out site.');
+    }
     return HtmlService.createHtmlOutputFromFile('Admin')
       .setTitle('Inventory Admin')
       .addMetaTag('viewport', 'width=device-width, initial-scale=1');
@@ -84,6 +87,14 @@ function withLock_(fn) {
 function invalidate_() {
   SpreadsheetApp.flush();
   CacheService.getScriptCache().remove(CACHE_KEY);
+}
+
+// True on the admin deployment (Execute as user accessing) and in the editor.
+// False on the public API, which runs as the owner: there, google.script.run
+// calls would run with the owner's access instead of the admin's.
+function runsAsViewer_() {
+  const active = Session.getActiveUser().getEmail().toLowerCase();
+  return !!active && active === Session.getEffectiveUser().getEmail().toLowerCase();
 }
 
 let SS;
@@ -279,8 +290,18 @@ function names_() {
   return JSON.parse(PropertiesService.getScriptProperties().getProperty(NAMES_KEY) || '{}');
 }
 
-function saveNames_(names) {
-  PropertiesService.getScriptProperties().setProperty(NAMES_KEY, JSON.stringify(names));
+// Re-reads the saved names under the script lock, so a directory lookup and an
+// admin's edit can't overwrite each other.
+function updateNames_(fn) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const names = names_();
+    fn(names);
+    PropertiesService.getScriptProperties().setProperty(NAMES_KEY, JSON.stringify(names));
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 // Name from the Google Workspace directory (People API advanced service):
@@ -303,6 +324,7 @@ function directoryName_(netid) {
 
 // Run from the editor to (re)approve the directory permission and see a sample.
 function testDirectoryLookup() {
+  if (!runsAsViewer_()) throw new Error('Run this from the Apps Script editor.');
   ScriptApp.requireScopes(ScriptApp.AuthMode.FULL, ['https://www.googleapis.com/auth/directory.readonly']);
   ['egf48', 'jsh253', 'vjp91'].forEach(id => {
     const name = directoryName_(id);
@@ -312,8 +334,10 @@ function testDirectoryLookup() {
 
 // NetID -> display name. An admin's entry wins, then the Google directory,
 // then the name typed on the check-out site. Looks up a few new NetIDs per load.
-function resolveNames_(log) {
-  const saved = names_();
+// Directory names are left out of public data: anyone can check out under any
+// NetID, which would otherwise turn the site into a directory search.
+function resolveNames_(log, isPublic) {
+  let saved = names_();
   const typed = {};
   const netids = new Set(Object.keys(saved));
   log.forEach(e => {
@@ -322,28 +346,33 @@ function resolveNames_(log) {
     netids.add(p.netid);
     if (p.name !== p.netid) typed[p.netid] = p.name;
   });
-  let lookups = 0;
+  const found = {};
   netids.forEach(id => {
     const s = saved[id];
-    if ((s && (s.name || Date.now() - s.checked < RETRY_MS)) || lookups >= LOOKUPS_PER_LOAD) return;
-    lookups++;
+    if ((s && (s.name || Date.now() - s.checked < RETRY_MS)) || Object.keys(found).length >= LOOKUPS_PER_LOAD) return;
     const name = directoryName_(id);
     // A failed lookup is retried in an hour; "not listed" in a week.
     const checked = name === null ? Date.now() - RETRY_MS + 3600 * 1000 : Date.now();
-    saved[id] = { name: name || '', source: 'directory', checked };
+    found[id] = { name: name || '', source: 'directory', checked };
   });
-  if (lookups) saveNames_(saved);
+  if (Object.keys(found).length) {
+    // An admin may have set one of these names while the lookups ran; theirs wins.
+    updateNames_(names => Object.keys(found).forEach(id => { if (!names[id] || names[id].source !== 'admin') names[id] = found[id]; }));
+    saved = names_();
+  }
   const out = {};
   netids.forEach(id => {
-    const name = (saved[id] && saved[id].name) || typed[id];
+    const s = saved[id];
+    const usable = s && s.name && !(isPublic && s.source === 'directory');
+    const name = (usable && s.name) || typed[id];
     if (name) out[id] = name;
   });
   return out;
 }
 
 // Adds `name` (resolved) and `netid` to log entries and checked-out lines.
-function withNames_(log, out) {
-  const names = resolveNames_(log);
+function withNames_(log, out, isPublic) {
+  const names = resolveNames_(log, isPublic);
   const label = who => { const p = person_(who); return { name: names[p.netid] || p.name, netid: p.netid }; };
   log.forEach(e => Object.assign(e, label(e.who)));
   out.forEach(o => Object.assign(o, label(o.who)));
@@ -353,11 +382,9 @@ function withNames_(log, out) {
 function setName_(p) {
   const netid = String(p.netid || '').trim().toLowerCase();
   if (!/^[a-z0-9._-]+$/.test(netid)) throw new Error('Enter a NetID like egf48.');
-  const saved = names_();
   const name = String(p.name || '').trim();
   // Clearing a name goes back to the directory / typed name.
-  if (name) saved[netid] = { name, source: 'admin', checked: Date.now() }; else delete saved[netid];
-  saveNames_(saved);
+  updateNames_(saved => { if (name) saved[netid] = { name, source: 'admin', checked: Date.now() }; else delete saved[netid]; });
 }
 
 function listNames_() {
@@ -408,7 +435,7 @@ function getData_(fresh) {
     if (hit) return JSON.parse(hit);
   }
   const { cfg, offices, log, out } = snapshot_();
-  const people = withNames_(log, out);
+  const people = withNames_(log, out, true);
   const events = new Set();
   const teams = new Set();
   log.forEach(e => {
@@ -515,6 +542,7 @@ function sheetEditors_() {
 // Admins are the emails in the admin list (Settings). Until that list is
 // set, every editor of the spreadsheet is an admin.
 function requireAdmin_() {
+  if (!runsAsViewer_()) throw new Error('Open the admin portal from the Admin link on the check-out site.');
   const email = Session.getActiveUser().getEmail().toLowerCase();
   if (!email) throw new Error('Sign in to Google to use the admin portal.');
   const admins = getConfig_().admins || [];

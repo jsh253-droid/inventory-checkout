@@ -13,7 +13,7 @@ The **Admin** link at the bottom of the site opens the admin portal. You can cha
 
 - **Checkouts:** see who has what, check items in for someone, and search or delete rows in Form Responses 1.
 - **Inventory:** edit, add or delete item rows (the Total Out / Current Qty formulas are left alone, and new rows get them).
-- **Names:** NetIDs show as real names, looked up in the Rutgers Google directory (People API) or taken from what people typed; fix any name under **Settings → People**.
+- **Names:** NetIDs show as real names, looked up in the Rutgers Google directory (People API) or taken from what people typed; fix any name under **Settings → People**. Directory names appear only in the admin portal, so the public site can't be used to look people up; it shows names set by an admin or typed by the person.
 - **Settings:** set the site title, choose whether an event is required, and manage offices (add, rename, reorder, or point them at a different sheet tab and starting row).
 
 **Who can open the portal:** the people on the admin list in **Settings → Admins**. Admins add and remove each other there. If someone you add doesn't have edit access to the sheet yet, adding them gives it to them, because the portal needs it. If the list is ever empty, every editor of the sheet can get in.
